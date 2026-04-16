@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventario — Administración Interna</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f3;color:#1a1a1a;font-size:14px}
+  header{background:#fff;border-bottom:1px solid #e5e5e2;padding:14px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10}
+  header h1{font-size:16px;font-weight:600;flex:1}
+  header span{font-size:12px;color:#888;background:#f0f0ee;padding:3px 10px;border-radius:20px}
+  .main{max-width:1100px;margin:0 auto;padding:20px 16px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px}
+  .stat{background:#fff;border-radius:10px;border:1px solid #e5e5e2;padding:12px 16px}
+  .stat-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px}
+  .stat-val{font-size:24px;font-weight:600;margin-top:3px}
+  .tabs{display:flex;gap:2px;overflow-x:auto;padding-bottom:0;border-bottom:2px solid #e5e5e2;margin-bottom:18px}
+  .tab{padding:9px 16px;font-size:13px;color:#666;cursor:pointer;border-radius:8px 8px 0 0;white-space:nowrap;border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-2px}
+  .tab.active{color:#1a1a1a;font-weight:600;border-bottom-color:#1a1a1a}
+  .tab:hover{background:#f5f5f3}
+  .toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+  .toolbar input{flex:1;min-width:180px;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;background:#fff}
+  .toolbar input:focus{outline:none;border-color:#666}
+  .btn{padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer;border:1px solid #ddd;background:#fff;font-weight:500;white-space:nowrap}
+  .btn:hover{background:#f5f5f3}
+  .btn.primary{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+  .btn.primary:hover{background:#333}
+  .btn.danger{background:#dc3545;color:#fff;border-color:#dc3545}
+  .btn.danger:hover{background:#b02a37}
+  .btn.sm{padding:4px 10px;font-size:12px}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;border:1px solid #e5e5e2;overflow:hidden}
+  th{text-align:left;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;background:#fafaf8;border-bottom:1px solid #e5e5e2}
+  td{padding:9px 14px;border-bottom:1px solid #f0f0ee;vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#fafaf8}
+  .badge{display:inline-flex;align-items:center;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px}
+  .ok{background:#e8f5e9;color:#2e7d32}
+  .bajo{background:#fff3e0;color:#e65100}
+  .agotado{background:#fce4ec;color:#c62828}
+  .azul{background:#e3f2fd;color:#1565c0}
+  .tag{background:#f0f0ee;color:#555;font-size:11px;padding:2px 8px;border-radius:20px}
+  .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;align-items:center;justify-content:center}
+  .overlay.open{display:flex}
+  .modal{background:#fff;border-radius:14px;padding:24px;width:420px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+  .modal h2{font-size:16px;font-weight:600;margin-bottom:18px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:12px;font-weight:500;color:#555;margin-bottom:5px}
+  .field input,.field select,.field textarea{width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:#666}
+  .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+  .empty{text-align:center;padding:40px;color:#aaa;font-size:14px}
+  .loading{text-align:center;padding:40px;color:#aaa}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:500;z-index:200;display:none}
+  .saving{opacity:.5;pointer-events:none}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📦 Inventario — Administración Interna</h1>
+  <span id="sync-status">Cargando...</span>
+</header>
+
+<div class="main">
+  <div class="stats" id="statsBar"></div>
+  <div class="tabs" id="tabsBar"></div>
+  <div id="content"><div class="loading">Cargando inventario...</div></div>
+</div>
+
+<!-- Modal Artículo -->
+<div class="overlay" id="modalItem">
+<div class="modal">
+  <h2 id="modalItemTitle">Agregar artículo</h2>
+  <div class="field"><label>Nombre del artículo</label><input id="mNombre" placeholder="Ej: Computador Dell Optiplex"></div>
+  <div class="field"><label>Marca</label><input id="mMarca" placeholder="Ej: Dell"></div>
+  <div class="field"><label>Cantidad en stock</label><input id="mCantidad" type="number" min="0" value="1"></div>
+  <div class="field"><label>Categoría</label><select id="mCat"></select></div>
+  <div class="field"><label>Código / N° inventario (opcional)</label><input id="mCodigo" placeholder="Ej: 10401014.66"></div>
+  <div class="modal-actions">
+    <button class="btn" onclick="closeModalItem()">Cancelar</button>
+    <button class="btn primary" onclick="saveItem()">Guardar</button>
+  </div>
+</div>
+</div>
+
+<!-- Modal Préstamo -->
+<div class="overlay" id="modalPrest">
+<div class="modal">
+  <h2>Registrar retiro</h2>
+  <div class="field"><label>Artículo</label><input id="pItem" readonly style="background:#f5f5f3"></div>
+  <div class="field"><label>Funcionario</label><input id="pFuncionario" placeholder="Nombre completo"></div>
+  <div class="field"><label>Unidad / Área</label><input id="pArea" placeholder="Ej: Registro Civil, RRHH..."></div>
+  <div class="field"><label>Cantidad a retirar</label><input id="pCantidad" type="number" min="1" value="1"></div>
+  <div class="field"><label>Fecha</label><input id="pFecha" type="date"></div>
+  <div class="field"><label>Observaciones (opcional)</label><textarea id="pObs" rows="2" placeholder="Motivo, destino, etc."></textarea></div>
+  <div class="modal-actions">
+    <button class="btn" onclick="closeModalPrest()">Cancelar</button>
+    <button class="btn primary" onclick="savePrest()">Registrar retiro</button>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CATS = [
+  {id:'utiles',    label:'Útiles de oficina'},
+  {id:'tintas',    label:'Tintas y tóneres'},
+  {id:'pilas',     label:'Pilas y cuadernillos'},
+  {id:'aseo',      label:'Aseo'},
+  {id:'tecnologia',label:'Tecnología'},
+  {id:'mobiliario',label:'Mobiliario'},
+  {id:'otros',     label:'Otros'}
+];
+
+const DEFAULT_ITEMS = [
+  {id:1,nombre:"PORTA LAPIZ",marca:"ISOFIT",cantidad:8,cat:"utiles",codigo:""},
+  {id:2,nombre:"PERFORADORA",marca:"ATLANTICK",cantidad:6,cat:"utiles",codigo:""},
+  {id:3,nombre:"MODEM",marca:"ZTE",cantidad:2,cat:"tecnologia",codigo:"10901005"},
+  {id:4,nombre:"CALCULADORA GRANDE",marca:"",cantidad:2,cat:"utiles",codigo:""},
+  {id:5,nombre:"CALCULADORA PEQUEÑA",marca:"",cantidad:1,cat:"utiles",codigo:""},
+  {id:6,nombre:"SACA CORCHETE",marca:"ATLANTICK",cantidad:16,cat:"utiles",codigo:""},
+  {id:7,nombre:"CAMARA WEB",marca:"GENIUS CAM",cantidad:5,cat:"tecnologia",codigo:""},
+  {id:8,nombre:"AURICULARES",marca:"",cantidad:7,cat:"tecnologia",codigo:"10401014"},
+  {id:9,nombre:"CORCHETE 26/6",marca:"TORRE",cantidad:70,cat:"utiles",codigo:""},
+  {id:10,nombre:"POSIT TRIPLE NEON",marca:"ATLANTICK",cantidad:21,cat:"utiles",codigo:""},
+  {id:11,nombre:"POSIT AMARILLO",marca:"TORRE",cantidad:52,cat:"utiles",codigo:""},
+  {id:12,nombre:"POSIT ROSADO",marca:"TORRE",cantidad:11,cat:"utiles",codigo:""},
+  {id:13,nombre:"APRETADOR 19MM",marca:"",cantidad:288,cat:"utiles",codigo:""},
+  {id:14,nombre:"APRETADOR 25MM",marca:"",cantidad:144,cat:"utiles",codigo:""},
+  {id:15,nombre:"LAPIZ PASTA ROJO",marca:"BIC",cantidad:900,cat:"utiles",codigo:""},
+  {id:16,nombre:"LAPIZ PASTA ROJO",marca:"FABER CASTELL",cantidad:200,cat:"utiles",codigo:""},
+  {id:17,nombre:"LAPIZ PASTA NEGRO",marca:"FABER CASTELL",cantidad:50,cat:"utiles",codigo:""},
+  {id:18,nombre:"LAPIZ PASTA AZUL",marca:"TORRE",cantidad:24,cat:"utiles",codigo:""},
+  {id:19,nombre:"LAPIZ GEL NEGRO",marca:"TORRE",cantidad:36,cat:"utiles",codigo:""},
+  {id:20,nombre:"LAPIZ GEL ROJO",marca:"TORRE",cantidad:12,cat:"utiles",codigo:""},
+  {id:21,nombre:"LAPIZ GEL AZUL",marca:"TORRE",cantidad:12,cat:"utiles",codigo:""},
+  {id:22,nombre:"LAPIZ GRAFITO",marca:"TORRE",cantidad:12,cat:"utiles",codigo:""},
+  {id:23,nombre:"PLUMÓN ROJO PERMANENTE",marca:"ARTEL",cantidad:84,cat:"utiles",codigo:""},
+  {id:24,nombre:"PLUMÓN AZUL PERMANENTE",marca:"ARTEL",cantidad:180,cat:"utiles",codigo:""},
+  {id:25,nombre:"PLUMÓN NEGRO PERMANENTE",marca:"FULTONS",cantidad:24,cat:"utiles",codigo:""},
+  {id:26,nombre:"PLUMÓN NEGRO PIZARRA",marca:"TORRE",cantidad:36,cat:"utiles",codigo:""},
+  {id:27,nombre:"PLUMÓN ROJO PIZARRA",marca:"ARTEL",cantidad:60,cat:"utiles",codigo:""},
+  {id:28,nombre:"CLIP GRANDE",marca:"TORRE",cantidad:30,cat:"utiles",codigo:""},
+  {id:29,nombre:"CLIP PEQUEÑO",marca:"FULTONS",cantidad:46,cat:"utiles",codigo:""},
+  {id:30,nombre:"TIJERA",marca:"TORRE",cantidad:2,cat:"utiles",codigo:""},
+  {id:31,nombre:"GUILLOTINA RODILLO",marca:"RODAHLE",cantidad:2,cat:"utiles",codigo:"10601039"},
+  {id:32,nombre:"TERMOLAMIDADORA",marca:"",cantidad:5,cat:"utiles",codigo:"10401008"},
+  {id:33,nombre:"CORCHETE GRANDE 23/13",marca:"",cantidad:7,cat:"utiles",codigo:""},
+  {id:34,nombre:"TINTA EPSON ROSADA",marca:"EPSON",cantidad:22,cat:"tintas",codigo:""},
+  {id:35,nombre:"TINTA EPSON AZUL",marca:"EPSON",cantidad:23,cat:"tintas",codigo:""},
+  {id:36,nombre:"TINTA EPSON AMARILLA",marca:"EPSON",cantidad:20,cat:"tintas",codigo:""},
+  {id:37,nombre:"TINTA EPSON NEGRA",marca:"EPSON",cantidad:21,cat:"tintas",codigo:""},
+  {id:38,nombre:"TINTA HP AZUL",marca:"HP",cantidad:7,cat:"tintas",codigo:""},
+  {id:39,nombre:"TINTA HP ROSADA",marca:"HP",cantidad:10,cat:"tintas",codigo:""},
+  {id:40,nombre:"TINTA HP NEGRA",marca:"HP",cantidad:1,cat:"tintas",codigo:""},
+  {id:41,nombre:"TINTA BROTHER ROSADA",marca:"BROTHER",cantidad:11,cat:"tintas",codigo:""},
+  {id:42,nombre:"TINTA BROTHER AZUL",marca:"BROTHER",cantidad:8,cat:"tintas",codigo:""},
+  {id:43,nombre:"TINTA BROTHER NEGRA",marca:"BROTHER",cantidad:8,cat:"tintas",codigo:""},
+  {id:44,nombre:"TÓNNER NEGRO HP",marca:"HP",cantidad:7,cat:"tintas",codigo:""},
+  {id:45,nombre:"TÓNNER D101S",marca:"",cantidad:36,cat:"tintas",codigo:""},
+  {id:46,nombre:"TÓNNER 283A",marca:"",cantidad:22,cat:"tintas",codigo:""},
+  {id:47,nombre:"TÓNNER MLT 111S",marca:"",cantidad:28,cat:"tintas",codigo:""},
+  {id:48,nombre:"TÓNNER 1060I12",marca:"",cantidad:21,cat:"tintas",codigo:""},
+  {id:49,nombre:"TÓNNER KYOCERA 117S",marca:"",cantidad:4,cat:"tintas",codigo:""},
+  {id:50,nombre:"LIBRO ACTA 400 HOJAS",marca:"",cantidad:30,cat:"pilas",codigo:""},
+  {id:51,nombre:"LIBRO ACTA 100 HOJAS",marca:"",cantidad:4,cat:"pilas",codigo:""},
+  {id:52,nombre:"CUADERNILLO ESPIRAL PEQUEÑO",marca:"COLON",cantidad:120,cat:"pilas",codigo:""},
+  {id:53,nombre:"PILAS AA",marca:"DURACELL",cantidad:120,cat:"pilas",codigo:""},
+  {id:54,nombre:"PILAS AAA",marca:"DURACELL",cantidad:264,cat:"pilas",codigo:""},
+  {id:55,nombre:"PILAS C2",marca:"DURACELL",cantidad:72,cat:"pilas",codigo:""},
+  {id:56,nombre:"BATERÍA 9V",marca:"",cantidad:36,cat:"pilas",codigo:""},
+  {id:57,nombre:"PILA D",marca:"",cantidad:576,cat:"pilas",codigo:""},
+  {id:58,nombre:"PILAS CR123",marca:"",cantidad:24,cat:"pilas",codigo:""},
+  {id:59,nombre:"PILAS 2032",marca:"",cantidad:330,cat:"pilas",codigo:""},
+  {id:60,nombre:"PAPEL FOTOGRÁFICO",marca:"",cantidad:17,cat:"pilas",codigo:""},
+  {id:61,nombre:"OPALINA BLANCA CARTA",marca:"",cantidad:300,cat:"pilas",codigo:""},
+  {id:62,nombre:"SABANILLA",marca:"ELITE",cantidad:142,cat:"aseo",codigo:""},
+  {id:63,nombre:"TOALLA NOVA GRANDE",marca:"",cantidad:56,cat:"aseo",codigo:""},
+  {id:64,nombre:"LIMPIADOR EN CREMA",marca:"BEWIN",cantidad:17,cat:"aseo",codigo:""},
+  {id:65,nombre:"LAVALOZAS",marca:"VIRGINIA",cantidad:3,cat:"aseo",codigo:""},
+  {id:66,nombre:"ESPONJA FIBRA",marca:"",cantidad:38,cat:"aseo",codigo:""},
+  {id:67,nombre:"BOLSA BASURA 80X110",marca:"VIRUTEX",cantidad:410,cat:"aseo",codigo:""},
+  {id:68,nombre:"BOLSA BASURA 70X90",marca:"VIRUTEX",cantidad:270,cat:"aseo",codigo:""},
+  {id:69,nombre:"PAÑO AMARILLO LIMPIEZA",marca:"STICH",cantidad:102,cat:"aseo",codigo:""},
+  {id:70,nombre:"ESCOBILLÓN",marca:"",cantidad:6,cat:"aseo",codigo:""},
+  {id:71,nombre:"PLUMERO",marca:"VIRITEX",cantidad:9,cat:"aseo",codigo:""},
+  {id:72,nombre:"JABÓN LÍQUIDO 5LTS",marca:"ELITE",cantidad:15,cat:"aseo",codigo:""},
+  {id:73,nombre:"ESCOBILLA MANO MADERA",marca:"",cantidad:59,cat:"aseo",codigo:""},
+  {id:74,nombre:"ESCOBILLA MANO PLÁSTICO",marca:"",cantidad:63,cat:"aseo",codigo:""}
+];
+
+let state = { items: [], prestamos: [], nextId: 200 };
+let currentTab = 'utiles';
+let searches = {};
+let editId = null;
+let prestItemId = null;
+let saving = false;
+
+async function loadData() {
+  try {
+    const r = await fetch('/api/data');
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    state = d;
+    document.getElementById('sync-status').textContent = 'Sincronizado ✓';
+  } catch(e) {
+    // First time or error — use defaults
+    state = { items: JSON.parse(JSON.stringify(DEFAULT_ITEMS)), prestamos: [], nextId: 200 };
+    document.getElementById('sync-status').textContent = 'Sin conexión (modo local)';
+    await saveData();
+  }
+  render();
+}
+
+async function saveData() {
+  try {
+    document.getElementById('sync-status').textContent = 'Guardando...';
+    await fetch('/api/data', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(state)
+    });
+    document.getElementById('sync-status').textContent = 'Guardado ✓';
+  } catch(e) {
+    document.getElementById('sync-status').textContent = 'Error al guardar';
+  }
+}
+
+function render() {
+  renderStats();
+  renderTabs();
+  renderContent();
+}
+
+function renderStats() {
+  const total = state.items.length;
+  const agotados = state.items.filter(i=>i.cantidad===0).length;
+  const bajos = state.items.filter(i=>i.cantidad>0&&i.cantidad<=5).length;
+  const totalPrest = state.prestamos.length;
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stat"><div class="stat-label">Total artículos</div><div class="stat-val">${total}</div></div>
+    <div class="stat"><div class="stat-label">Retiros registrados</div><div class="stat-val">${totalPrest}</div></div>
+    <div class="stat"><div class="stat-label" style="color:#e65100">Stock bajo ≤5</div><div class="stat-val" style="color:#e65100">${bajos}</div></div>
+    <div class="stat"><div class="stat-label" style="color:#c62828">Agotados</div><div class="stat-val" style="color:#c62828">${agotados}</div></div>
+  `;
+}
+
+function renderTabs() {
+  const allTabs = [...CATS, {id:'retiros', label:'📋 Retiros'}];
+  document.getElementById('tabsBar').innerHTML = allTabs.map(c =>
+    `<button class="tab${c.id===currentTab?' active':''}" onclick="switchTab('${c.id}')">${c.label}</button>`
+  ).join('');
+}
+
+function switchTab(id) {
+  currentTab = id;
+  renderTabs();
+  renderContent();
+}
+
+function renderContent() {
+  if (currentTab === 'retiros') {
+    renderRetiros();
+  } else {
+    renderCat(currentTab);
+  }
+}
+
+function renderCat(catId) {
+  const q = (searches[catId]||'').toLowerCase();
+  const list = state.items.filter(i => i.cat === catId && (
+    i.nombre.toLowerCase().includes(q) ||
+    (i.marca||'').toLowerCase().includes(q) ||
+    (i.codigo||'').toLowerCase().includes(q)
+  ));
+
+  const rows = list.length === 0
+    ? `<tr><td colspan="5" class="empty">Sin artículos. Agrega el primero con el botón verde.</td></tr>`
+    : list.map(i => `
+      <tr>
+        <td>
+          <strong>${cap(i.nombre)}</strong>
+          ${i.codigo ? `<br><span style="font-size:11px;color:#aaa">${i.codigo}</span>` : ''}
+        </td>
+        <td>${i.marca ? `<span class="tag">${i.marca}</span>` : '<span style="color:#ccc">—</span>'}</td>
+        <td>${stockBadge(i.cantidad)}</td>
+        <td>
+          <button class="btn sm primary" onclick="openPrest(${i.id})" ${i.cantidad===0?'disabled':''}>↓ Retirar</button>
+          <button class="btn sm" onclick="openEdit(${i.id})" style="margin-left:4px">Editar</button>
+          <button class="btn sm danger" onclick="deleteItem(${i.id})" style="margin-left:4px">✕</button>
+        </td>
+      </tr>`).join('');
+
+  document.getElementById('content').innerHTML = `
+    <div class="toolbar">
+      <input placeholder="Buscar artículo, marca o código..." value="${searches[catId]||''}"
+        oninput="searches['${catId}']=this.value; renderContent()">
+      <button class="btn primary" onclick="openAdd('${catId}')">+ Agregar artículo</button>
+    </div>
+    <table>
+      <thead><tr><th>Artículo</th><th>Marca</th><th>Stock</th><th>Acciones</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderRetiros() {
+  const q = (searches['retiros']||'').toLowerCase();
+  const list = [...state.prestamos].reverse().filter(p =>
+    p.item.toLowerCase().includes(q) ||
+    p.funcionario.toLowerCase().includes(q) ||
+    (p.area||'').toLowerCase().includes(q)
+  );
+
+  const rows = list.length === 0
+    ? `<tr><td colspan="6" class="empty">Sin retiros registrados aún.</td></tr>`
+    : list.map(p => `
+      <tr>
+        <td><strong>${cap(p.item)}</strong></td>
+        <td>${p.funcionario}</td>
+        <td style="color:#666">${p.area||'—'}</td>
+        <td><span class="badge azul">${p.cantidad} un.</span></td>
+        <td style="color:#888">${p.fecha}</td>
+        <td>
+          <button class="btn sm danger" onclick="deleteRetiro(${p.id})">✕</button>
+        </td>
+      </tr>`).join('');
+
+  document.getElementById('content').innerHTML = `
+    <div class="toolbar">
+      <input placeholder="Buscar por artículo, funcionario o área..." value="${searches['retiros']||''}"
+        oninput="searches['retiros']=this.value; renderContent()">
+    </div>
+    <table>
+      <thead><tr><th>Artículo</th><th>Funcionario</th><th>Área</th><th>Cantidad</th><th>Fecha</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function stockBadge(q) {
+  if (q === 0) return '<span class="badge agotado">Agotado</span>';
+  if (q <= 5)  return `<span class="badge bajo">⚠ ${q}</span>`;
+  return `<span class="badge ok">${q}</span>`;
+}
+
+function cap(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
+function openAdd(catId) {
+  editId = null;
+  document.getElementById('modalItemTitle').textContent = 'Agregar artículo';
+  document.getElementById('mNombre').value = '';
+  document.getElementById('mMarca').value = '';
+  document.getElementById('mCantidad').value = 1;
+  document.getElementById('mCodigo').value = '';
+  const sel = document.getElementById('mCat');
+  sel.innerHTML = CATS.map(c => `<option value="${c.id}"${c.id===catId?' selected':''}>${c.label}</option>`).join('');
+  document.getElementById('modalItem').classList.add('open');
+  setTimeout(()=>document.getElementById('mNombre').focus(),100);
+}
+
+function openEdit(id) {
+  const it = state.items.find(i=>i.id===id);
+  if (!it) return;
+  editId = id;
+  document.getElementById('modalItemTitle').textContent = 'Editar artículo';
+  document.getElementById('mNombre').value = it.nombre;
+  document.getElementById('mMarca').value = it.marca||'';
+  document.getElementById('mCantidad').value = it.cantidad;
+  document.getElementById('mCodigo').value = it.codigo||'';
+  const sel = document.getElementById('mCat');
+  sel.innerHTML = CATS.map(c => `<option value="${c.id}"${c.id===it.cat?' selected':''}>${c.label}</option>`).join('');
+  document.getElementById('modalItem').classList.add('open');
+}
+
+async function saveItem() {
+  const nombre = document.getElementById('mNombre').value.trim().toUpperCase();
+  if (!nombre) { document.getElementById('mNombre').focus(); return; }
+  const obj = {
+    nombre,
+    marca: document.getElementById('mMarca').value.trim().toUpperCase(),
+    cantidad: parseInt(document.getElementById('mCantidad').value)||0,
+    cat: document.getElementById('mCat').value,
+    codigo: document.getElementById('mCodigo').value.trim()
+  };
+  if (editId) {
+    const idx = state.items.findIndex(i=>i.id===editId);
+    state.items[idx] = { ...state.items[idx], ...obj };
+  } else {
+    obj.id = state.nextId++;
+    state.items.push(obj);
+  }
+  closeModalItem();
+  render();
+  await saveData();
+  toast('Guardado ✓');
+}
+
+async function deleteItem(id) {
+  if (!confirm('¿Eliminar este artículo del inventario?')) return;
+  state.items = state.items.filter(i=>i.id!==id);
+  render();
+  await saveData();
+  toast('Artículo eliminado');
+}
+
+function closeModalItem() { document.getElementById('modalItem').classList.remove('open') }
+
+function openPrest(id) {
+  const it = state.items.find(i=>i.id===id);
+  if (!it) return;
+  prestItemId = id;
+  document.getElementById('pItem').value = it.nombre + (it.marca ? ' — ' + it.marca : '');
+  document.getElementById('pFuncionario').value = '';
+  document.getElementById('pArea').value = '';
+  document.getElementById('pCantidad').value = 1;
+  document.getElementById('pCantidad').max = it.cantidad;
+  document.getElementById('pFecha').value = new Date().toISOString().slice(0,10);
+  document.getElementById('pObs').value = '';
+  document.getElementById('modalPrest').classList.add('open');
+  setTimeout(()=>document.getElementById('pFuncionario').focus(),100);
+}
+
+async function savePrest() {
+  const func = document.getElementById('pFuncionario').value.trim();
+  if (!func) { document.getElementById('pFuncionario').focus(); return; }
+  const cant = parseInt(document.getElementById('pCantidad').value)||1;
+  const it = state.items.find(i=>i.id===prestItemId);
+  if (!it || cant > it.cantidad) { alert('Stock insuficiente'); return; }
+  it.cantidad -= cant;
+  state.prestamos.push({
+    id: state.nextId++,
+    item: it.nombre,
+    marca: it.marca,
+    funcionario: func,
+    area: document.getElementById('pArea').value.trim(),
+    cantidad: cant,
+    fecha: document.getElementById('pFecha').value,
+    obs: document.getElementById('pObs').value.trim()
+  });
+  closeModalPrest();
+  render();
+  await saveData();
+  toast('Retiro registrado ✓');
+}
+
+async function deleteRetiro(id) {
+  const p = state.prestamos.find(x=>x.id===id);
+  if (!p || !confirm('¿Eliminar este retiro? Se devolverá el stock.')) return;
+  const it = state.items.find(i=>i.nombre===p.item);
+  if (it) it.cantidad += p.cantidad;
+  state.prestamos = state.prestamos.filter(x=>x.id!==id);
+  render();
+  await saveData();
+  toast('Retiro eliminado, stock restaurado');
+}
+
+function closeModalPrest() { document.getElementById('modalPrest').classList.remove('open') }
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(()=>{ t.style.display='none' }, 2500);
+}
+
+document.querySelectorAll('.overlay').forEach(el => {
+  el.addEventListener('click', e => { if(e.target===el) el.classList.remove('open') });
+});
+
+loadData();
+</script>
+</body>
+</html>

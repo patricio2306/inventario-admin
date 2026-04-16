@@ -1,0 +1,8 @@
+{
+  "name": "inventario-admin",
+  "version": "1.0.0",
+  "description": "Inventario Administración Interna",
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}
