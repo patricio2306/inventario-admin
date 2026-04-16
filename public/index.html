@@ -117,6 +117,8 @@ const CATS = [
   {id:'otros',     label:'Otros'}
 ];
 
+const BIN_ID = "69e1155c856a6821893f94ed";
+const API_KEY = "$2a$10$7DZd.ud2Xlz.hgKX1C0yYO6Oy8QDMb6hIGBzMxuZPHghaUUEXvOw6";
 const DEFAULT_ITEMS = [
   {id:1,nombre:"PORTA LAPIZ",marca:"ISOFIT",cantidad:8,cat:"utiles",codigo:""},
   {id:2,nombre:"PERFORADORA",marca:"ATLANTICK",cantidad:6,cat:"utiles",codigo:""},
@@ -203,16 +205,22 @@ let saving = false;
 
 async function loadData() {
   try {
-    const r = await fetch('/api/data');
+    const r = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
+      headers: { 'X-Master-Key': API_KEY }
+    });
     if (!r.ok) throw new Error();
     const d = await r.json();
-    state = d;
+    const record = d.record;
+    if (!record.items || record.items.length === 0) {
+      state = { items: JSON.parse(JSON.stringify(DEFAULT_ITEMS)), prestamos: [], nextId: 200 };
+      await saveData();
+    } else {
+      state = record;
+    }
     document.getElementById('sync-status').textContent = 'Sincronizado ✓';
   } catch(e) {
-    // First time or error — use defaults
     state = { items: JSON.parse(JSON.stringify(DEFAULT_ITEMS)), prestamos: [], nextId: 200 };
     document.getElementById('sync-status').textContent = 'Sin conexión (modo local)';
-    await saveData();
   }
   render();
 }
@@ -220,9 +228,12 @@ async function loadData() {
 async function saveData() {
   try {
     document.getElementById('sync-status').textContent = 'Guardando...';
-    await fetch('/api/data', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
+    await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': API_KEY
+      },
       body: JSON.stringify(state)
     });
     document.getElementById('sync-status').textContent = 'Guardado ✓';
